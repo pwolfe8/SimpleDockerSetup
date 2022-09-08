@@ -1,0 +1,33 @@
+version: "3.9"
+services:
+
+  ###### name service ######
+  # [service name below] line below gets replaced by manage.py with your container config name
+  changeme_service:
+    image: ${BASENAME}_img_${PARENTDIR}
+    container_name: ${BASENAME}_instance_${PARENTDIR}
+
+    #### command to keep container alive ####
+    command: /bin/bash -c "./entrypoint.sh"
+
+    #### build Dockerfile and pass build args ####
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # choose if you want to use starting image with or without GPU 
+        FROM_IMG: ${FROM_IMG_NOGPU}
+        # FROM_IMG: ${FROM_IMG_GPU}
+
+    #### volumes and mappings ####
+    volumes:
+      - ${MAP_DISPLAY}
+      - ${MAP_SSH}
+      - ${MAP_TIMEZONE}
+      - ./ContainerCode:/root/${BASENAME}
+      
+    network_mode: "host" # uses host network stack 
+    working_dir: /root/${BASENAME}
+    # restart: always
+    # ipc: host
+    

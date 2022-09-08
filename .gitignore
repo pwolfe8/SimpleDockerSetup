@@ -1,0 +1,4 @@
+# vscode settings folder
+.vscode
+# .env file for passing args to docker-compose.yaml
+.env
