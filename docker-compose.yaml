@@ -21,9 +21,9 @@ services:
 
     #### volumes and mappings ####
     volumes:
-      - ${MAP_DISPLAY}
-      - ${MAP_SSH}
-      - ${MAP_TIMEZONE}
+      # - ${MAP_DISPLAY}
+      # - ${MAP_SSH}
+      # - ${MAP_TIMEZONE}
       - ./ContainerCode:/root/${BASENAME}
       
     network_mode: "host" # uses host network stack 

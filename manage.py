@@ -139,11 +139,11 @@ class CommandManager:
             else:
                 cmdlist.append(upcmd)
         elif args.action == 'down':
-            if status == 'Down':
-                print(f'seems project {projectname} is already down')
-                exit(1)
-            else:
-                cmdlist.append(downcmd)
+            # if status == 'Down':
+            #     print(f'seems project {projectname} is already down')
+            #     exit(1)
+            # else:
+            cmdlist.append(downcmd)
         elif args.action == 'restart':
             cmdlist.append(downcmd)
             cmdlist.append(upcmd)
