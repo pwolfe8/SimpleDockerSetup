@@ -14,10 +14,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        # choose if you want to use starting image with or without GPU 
-        FROM_IMG: ${FROM_IMG_NOGPU}
-        # FROM_IMG: ${FROM_IMG_GPU}
+      ### uncomment below to pass in build args to Dockerfile
+      # args:
+      #   # choose if you want to use starting image with or without GPU 
+      #   FROM_IMG: ${FROM_IMG_NOGPU}
+      #   # FROM_IMG: ${FROM_IMG_GPU}
 
     #### volumes and mappings ####
     volumes:

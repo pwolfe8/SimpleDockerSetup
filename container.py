@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import code
 
@@ -10,7 +10,7 @@ import platform
 import yaml
 
 # load container config
-with open('ContainerConfig.yaml', 'r') as f:
+with open('container_config.yaml', 'r') as f:
     cfg = yaml.safe_load(f)
 
 class CommandManager:
@@ -139,10 +139,6 @@ class CommandManager:
             else:
                 cmdlist.append(upcmd)
         elif args.action == 'down':
-            # if status == 'Down':
-            #     print(f'seems project {projectname} is already down')
-            #     exit(1)
-            # else:
             cmdlist.append(downcmd)
         elif args.action == 'restart':
             cmdlist.append(downcmd)
