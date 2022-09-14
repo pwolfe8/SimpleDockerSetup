@@ -2,6 +2,7 @@
 
 
 # launch whatever you need here
+echo "launching container 1"
 
 
 # this command runs infinitely to keep container alive.

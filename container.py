@@ -14,42 +14,40 @@ with open('container_config.yaml', 'r') as f:
     cfg = yaml.safe_load(f)
 
 class CommandManager:
-    
-    # name of container stuff
-    basename = cfg['name']
-
-    # choices of actions you can take
-    action_choices = ('up', 'down', 'restart', 'attach', 'logs', 'status')
 
     # set service name in the docker-compose.yaml using container config name
     @staticmethod
     def init_composefile_service_name(composefile):
-        # get basename from container config yaml
-        basename = cfg['name']
+        # get parent directory
+        parentdir = Path.cwd().parent.name
+        
+        envlist = []
+
         # read lines
         with open(composefile, 'r') as f:
             lines = f.readlines()
         # replace service name
-        replaceNextLine = False
-        triggerline = '[service name below]'
+        replaceNextLines = False
+        triggerline = '[container_'
+        service_key, service_name = None, None
         for idx, line in enumerate(lines):
-            if replaceNextLine:
-                lines[idx] = f'  {basename}_service:\n'
-                break
+            if replaceNextLines:
+                lines[idx] = f'  {service_name}_service:\n'
+                replaceNextLines = False
             elif triggerline in line:
-                replaceNextLine = True
+                replaceNextLines = True
+                service_key =  line[line.find('[')+1:line.find(']')]
+                service_name = cfg[service_key]['name']
+                service_folder = cfg[service_key]['folder']
+                # udpate env list with service params
+                envlist.append(f'{service_key}={service_name}')
+                envlist.append(f'{service_key}_folder={service_folder}')
+
         # write lines
         with open(composefile, 'w') as f:
             f.writelines(lines)
 
-    class ValidateCamGroupNum(argparse.Action):
-        cameragroup_range = range(0, 100)
-
-        def __call__(self, parser, namespace, values, option_string=None):
-            if values not in self.cameragroup_range:
-                raise argparse.ArgumentError(
-                    self, f'not in range {self.cameragroup_range}')
-            setattr(namespace, self.dest, values)
+        return envlist
 
     def __init__(self) -> None:
         pass
@@ -103,41 +101,56 @@ class CommandManager:
 
     @classmethod
     def parsecommand(cls, args):
-        # TODO make a multiple container example here 
         parentdir = Path.cwd().parent.name
         envlist = cls.getSharedDockerComposeEnv()
-        basename = cls.basename
-        envlist.append(f'BASENAME={basename}')
         composefile = 'docker-compose.yaml'
-        cls.init_composefile_service_name(composefile)
-        projectname = f'{parentdir}_{basename}'
-        containername = f'{basename}_instance_{parentdir}'
-        cmdlist = cls.parseaction(composefile, projectname, containername, envlist)
-        
+        service_env_list = cls.init_composefile_service_name(composefile)
+        envlist.extend(service_env_list)
+        projectname = f"{parentdir}_{cfg['project_name']}"
+        cmdlist = cls.parseaction(composefile, projectname, args.container, envlist)
         return cmdlist, envlist
 
     
     @classmethod
-    def parseaction(cls, composefile, projectname, containername, envlist):
+    def parseaction(cls, composefile, projectname, container_name, envlist):
         cmdlist = []
+
+        parentdir = Path.cwd().parent.name
+        service_name = f'{container_name}_service'
+        instance_name = f'{container_name}_instance_{parentdir}'
 
         # check status first
         status, _stats = cls.getProjectStatus(projectname, composefile, envlist)
 
-        # check action and choose appropriate commands
-        cmdstart = f'docker-compose -f {composefile} -p {projectname}'
-        upcmd = f'{cmdstart} up --detach --build'
-        downcmd = f'{cmdstart} down -t 0'
-        attachcmd = f'docker exec -it {containername} /bin/bash'
-        logcmd = f'COMPOSE_FILE={composefile} docker-compose -p {projectname} logs -f'
-        statuscmd = f'COMPOSE_FILE={composefile} docker-compose -p {projectname} ps'
+        # create command strings for all or container here
+        cmd_start = f'docker-compose -f {composefile} -p {projectname}'
 
+        cmd_up_all = f'{cmd_start} up --detach --build'
+        cmd_up_container = f'{cmd_up_all} {service_name}'
+
+        cmd_down_all = f'{cmd_start} down -t 0'
+        cmd_down_container = f'{cmd_start} stop {service_name} && {cmd_start} rm -f {service_name}'
+
+        cmd_attach_container = f'docker exec -it {instance_name} /bin/bash'
+
+        cmd_log_all = f'{cmd_start} logs -f'
+        cmd_log_container = f'{cmd_log_all} {service_name}'
+
+        cmd_status_all = f'{cmd_start} ps'
+        cmd_status_container = f'{cmd_status_all} {service_name}'
+
+        # actually parse action and append appropriate commands to execute
         if args.action == 'up':
-            if status == 'Up':
-                print(f'project {projectname} is already up!!')
-                exit(1)
+            if container_name == 'all':
+                if status == 'Up':
+                    print(f'project {projectname} is already up!!')
+                    exit(1)
+                else:
+                    cmdlist.append(upcmd)
             else:
-                cmdlist.append(upcmd)
+                pass
+
+            
         elif args.action == 'down':
             cmdlist.append(downcmd)
         elif args.action == 'restart':
@@ -182,6 +195,7 @@ class CommandManager:
             print(f'no commands present in command list. returning...')
             return
         # prep .env file
+        print(f'writing env list: {envlist}')
         cls.prep_env_file(envlist)
         # execute command list
         for cmd in cmdlist:
@@ -189,11 +203,32 @@ class CommandManager:
             cls.execute_cmd(cmd)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('action',
-                        help='action to do on local track handler container',
-                        choices=CommandManager.action_choices)
 
+    # Multi-container arg parsing (single compose file)
+    # Note: this is not same as multi-project where multiple compose files are used
+
+    parser = argparse.ArgumentParser()
+
+    # actions to do on each container
+    action_parser = parser.add_subparsers(title='action', dest='action', help='action to do on container', required=True)
+    actions = []
+    actions.append(action_parser.add_parser('up'))
+    actions.append(action_parser.add_parser('down'))
+    actions.append(action_parser.add_parser('restart'))
+    actions.append(action_parser.add_parser('logs'))
+    actions.append(action_parser.add_parser('status'))
+    actions.append(action_parser.add_parser('attach'))
+
+    # append additional params to actions here
+    for action in actions:
+        action.add_argument('container', help='container to attach to', nargs='?', default='all')
+
+    # parse args
     args = parser.parse_args()
+
+    
+
+    #### take action on args below ####
+
     cmdlist, envlist = CommandManager.parsecommand(args)
     CommandManager.execute_cmdlist(cmdlist, envlist)

@@ -10,8 +10,5 @@ RUN apt update && apt install -y python3 python3-pip && pip3 install --upgrade p
 COPY requirements.txt /root/requirements.txt
 RUN cd /root && pip3 install -r requirements.txt && rm requirements.txt
 
-# make this match your docker compose yaml working_dir 
-ARG WORKING_DIR=/root/${BASENAME}
 
-# copy in starting command
-COPY ./ContainerCode/entrypoint.sh ${WORKING_DIR}
+# COPY ./${CONTAINER_FOLDER}/entrypoint.sh ${}

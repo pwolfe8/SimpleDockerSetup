@@ -1,2 +1,7 @@
-name: changeme
-
+project_name: exampleproject
+container_1:
+  name: changeme1
+  folder: Container1
+container_2:
+  name: changeme2
+  folder: Container2
