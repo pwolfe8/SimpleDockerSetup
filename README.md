@@ -12,14 +12,11 @@ I made a container helper script called `container.py`.
 
 Run `./container.py -h` for full list of commands.
 
-Here are commands you can do:
+Here are commands you can do for the whole project (all containers):
 
 ```bash
 # builds container image using Dockerfile and brings up container with settings chosen in docker-compose.yaml 
 ./container.py up 
-
-# attaches bash session to container 
-./container.py attach
 
 # restarts container
 ./container.py restart
@@ -32,5 +29,32 @@ Here are commands you can do:
 
 # checks container command output 
 ./container.py logs
-
 ```
+
+And for individual container you can do
+
+```bash
+# builds container image using Dockerfile and brings up container with settings chosen in docker-compose.yaml 
+./container.py up containerNameHere
+
+# attaches bash session to container 
+./container.py attach containerNameHere
+
+# restarts container
+./container.py restart containerNameHere
+
+# brings down container
+./container.py down containerNameHere
+
+# checks container status
+./container.py status containerNameHere
+
+# checks container command output 
+./container.py logs containerNameHere
+```
+
+## Setup
+
+If using this template just be sure to match this folder structure for containers and specify the `name` and `folder` under `container_X` in the `container_config.yaml`
+
+**Leave `container_X` key format in the `container_config.yaml` as well as the `[container_X]` comments`docker-compose.yaml` as is!!**
