@@ -53,37 +53,42 @@ class CommandManager:
         pass
 
     @classmethod
-    def getProjectStatus(cls, projectname, composefile, envlist):
+    def getProjectStatus(cls, envlist, status_cmd_str):
         # prep env file before checking
         cls.prep_env_file(envlist)
-        # check
-        statuses = []
-        cmd = f'COMPOSE_FILE={composefile} docker-compose -p {projectname} ps'
-        proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-        lines = io.TextIOWrapper(proc.stdout, encoding="utf-8").readlines()
+        ret = cls.execute_cmd_getoutput(status_cmd_str)
+        lines = ret.split('\n')
         container_status_lines = lines[2:]
+
         # print(f'status lines: {container_status_lines}')
+
+        # code.interact(local=locals())
+
+        statuses = []
+
         if len(container_status_lines) == 0:
             return 'Down', None
         for line in container_status_lines:
-            spl = line.split()
-            # print(f'split: {spl}')
-            parsed_container_name = spl[0]
-            if 'Up' in [word.strip() for word in spl]:
-                status = 'Up'
-            else:
-                status = 'Down'
-            statuses.append((parsed_container_name, status))
+            if line:
+                spl = line.split()
+                parsed_container_name = spl[0]
+                if 'Up' in [word.strip() for word in spl]:
+                    status = 'Up'
+                else:
+                    status = 'Down'
+                statuses.append((parsed_container_name, status))
         status_set = set([s[1] for s in statuses])
         if len(status_set) == 1:
             overall_status = list(status_set)[0]
         else:
             overall_status = 'mixed'
             print(
-                f'project {projectname} overall status is mixed. you may want to check on this!!!!'
+                f'overall status is mixed. you may want to check on this!!!!'
             )
             print(statuses)
         return overall_status, statuses
+
+    
 
     @staticmethod
     def getSharedDockerComposeEnv():
@@ -119,9 +124,6 @@ class CommandManager:
         service_name = f'{container_name}_service'
         instance_name = f'{container_name}_instance_{parentdir}'
 
-        # check status first
-        status, _stats = cls.getProjectStatus(projectname, composefile, envlist)
-
         # create command strings for all or container here
         cmd_start = f'docker-compose -f {composefile} -p {projectname}'
 
@@ -129,7 +131,10 @@ class CommandManager:
         cmd_up_container = f'{cmd_up_all} {service_name}'
 
         cmd_down_all = f'{cmd_start} down -t 0'
-        cmd_down_container = f'{cmd_start} stop {service_name} && {cmd_start} rm -f {service_name}'
+        cmd_down_container = f'{cmd_start} stop {service_name} -t 0 && {cmd_start} rm -f {service_name}'
+
+        cmd_restart_all = f'{cmd_start} restart -t 0'
+        cmd_restart_container = f'{cmd_restart_all} {service_name}'
 
         cmd_attach_container = f'docker exec -it {instance_name} /bin/bash'
 
@@ -139,6 +144,13 @@ class CommandManager:
         cmd_status_all = f'{cmd_start} ps'
         cmd_status_container = f'{cmd_status_all} {service_name}'
 
+
+        # check status first
+        if container_name == 'all':           
+            status, _stats = cls.getProjectStatus(envlist, cmd_status_all)
+        else:
+            status, _stats = cls.getProjectStatus(envlist, cmd_status_container)
+
         # actually parse action and append appropriate commands to execute
         if args.action == 'up':
             if container_name == 'all':
@@ -146,27 +158,41 @@ class CommandManager:
                     print(f'project {projectname} is already up!!')
                     exit(1)
                 else:
-                    cmdlist.append(upcmd)
+                    cmdlist.append(cmd_up_all)
             else:
-                pass
+                if status == 'Up':
+                    print(f'container {container_name} is already up!!')
+                    exit(1)
+                else:
+                    cmdlist.append(cmd_up_container)
 
-            
         elif args.action == 'down':
-            cmdlist.append(downcmd)
+            if container_name == 'all': 
+                cmdlist.append(cmd_down_all)
+            else:
+                cmdlist.append(cmd_down_container)
+
         elif args.action == 'restart':
-            cmdlist.append(downcmd)
-            cmdlist.append(upcmd)
+            if container_name == 'all':
+                cmdlist.append(cmd_restart_all)
+            else:
+                cmdlist.append(cmd_restart_container)
+
         elif args.action == 'attach':
-            if status == 'Down':
-                print(f'seems project {projectname} is not up')
+            if container_name == 'all':
+                print('must specify a container to attach to')
+                print('options: {get_options_here_later}')
                 exit(1)
-            print(f'attaching to container {containername}...')
-            cmdlist.append(attachcmd)
+            else:
+                print(f'attaching to container instance {instance_name}...')
+                cmdlist.append(cmd_attach_container)
+
         elif args.action == 'logs':
             if status == 'Down':
                 print(f'seems project {projectname} is not up')
                 exit(1)
             cmdlist.append(logcmd)
+            
         elif args.action == 'status':
             cmdlist.append(statuscmd)
         else:
@@ -179,6 +205,11 @@ class CommandManager:
 
     @classmethod
     def execute_cmd_getoutput(cls, cmdstr):
+        # old cmd: subprocess.check_output(cmdstr.split()).decode('utf-8')
+        # lines = subprocess.check_output(cmdstr.split()).decode('utf-8')
+        # proc = subprocess.Popen(cmdstr, shell=True, stdout=subprocess.PIPE)
+        # lines = io.TextIOWrapper(proc.stdout, encoding="utf-8").readlines()
+        # return lines
         return subprocess.check_output(cmdstr.split()).decode('utf-8')
 
     @classmethod 
