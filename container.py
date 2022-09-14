@@ -78,7 +78,9 @@ class CommandManager:
                     status = 'Down'
                 statuses.append((parsed_container_name, status))
         status_set = set([s[1] for s in statuses])
-        if len(status_set) == 1:
+        if len(status_set) == 0:
+            return 'Down', None
+        elif len(status_set) == 1:
             overall_status = list(status_set)[0]
         else:
             overall_status = 'mixed'
@@ -154,11 +156,7 @@ class CommandManager:
         # actually parse action and append appropriate commands to execute
         if args.action == 'up':
             if container_name == 'all':
-                if status == 'Up':
-                    print(f'project {projectname} is already up!!')
-                    exit(1)
-                else:
-                    cmdlist.append(cmd_up_all)
+                cmdlist.append(cmd_up_all)
             else:
                 if status == 'Up':
                     print(f'container {container_name} is already up!!')
@@ -181,7 +179,9 @@ class CommandManager:
         elif args.action == 'attach':
             if container_name == 'all':
                 print('must specify a container to attach to')
-                print('options: {get_options_here_later}')
+                attachable_containers = cls.ValidateContainerArg.get_valid_containers()
+                attachable_containers.remove('all')
+                print(f'    options: {attachable_containers}')
                 exit(1)
             else:
                 print(f'attaching to container instance {instance_name}...')
@@ -210,11 +210,6 @@ class CommandManager:
 
     @classmethod
     def execute_cmd_getoutput(cls, cmdstr):
-        # old cmd: subprocess.check_output(cmdstr.split()).decode('utf-8')
-        # lines = subprocess.check_output(cmdstr.split()).decode('utf-8')
-        # proc = subprocess.Popen(cmdstr, shell=True, stdout=subprocess.PIPE)
-        # lines = io.TextIOWrapper(proc.stdout, encoding="utf-8").readlines()
-        # return lines
         return subprocess.check_output(cmdstr.split()).decode('utf-8')
 
     @classmethod 
@@ -249,13 +244,17 @@ class CommandManager:
             err_msg += f'must be from list'
             raise Exception()
 
+
     class ValidateContainerArg(argparse.Action):
-        def __call__(self, parser, namespace, values, option_string=None):
+        @staticmethod
+        def get_valid_containers():
             container_list = ['all']
             for key in cfg.keys():
                 if key != 'project_name':
                     container_list.append(cfg[key]['name'])
-            
+            return container_list
+        def __call__(self, parser, namespace, values, option_string=None):
+            container_list = self.get_valid_containers()
             if values not in container_list:
                 raise argparse.ArgumentError(
                     self, f'\'{values}\' not in container list: {container_list}')
