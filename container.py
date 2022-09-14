@@ -188,15 +188,20 @@ class CommandManager:
                 cmdlist.append(cmd_attach_container)
 
         elif args.action == 'logs':
-            if status == 'Down':
-                print(f'seems project {projectname} is not up')
-                exit(1)
-            cmdlist.append(logcmd)
-            
+            if container_name == 'all':
+                cmdlist.append(cmd_log_all)
+            else:
+                cmdlist.append(cmd_log_container)
+
         elif args.action == 'status':
-            cmdlist.append(statuscmd)
+            if container_name == 'all':
+                cmdlist.append(cmd_status_all)
+            else:
+                cmdlist.append(cmd_status_container)
+                
         else:
             raise Exception(f'unrecognized action {args.action}!')
+
         return cmdlist
     
     @classmethod
@@ -226,17 +231,41 @@ class CommandManager:
             print(f'no commands present in command list. returning...')
             return
         # prep .env file
-        print(f'writing env list: {envlist}')
         cls.prep_env_file(envlist)
         # execute command list
         for cmd in cmdlist:
             print(f'executing {cmd}')
             cls.execute_cmd(cmd)
 
+    @classmethod
+    def verify_container(cls, container_name):
+        container_list = ['all']
+        for key in cfg.keys():
+            if key != 'project_name':
+                container_list.append(cfg[key]['name'])
+        valid = (container_name in container_list)
+        if not valid:
+            err_msg = f'invalid container name {container_name}\n'
+            err_msg += f'must be from list'
+            raise Exception()
+
+    class ValidateContainerArg(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            container_list = ['all']
+            for key in cfg.keys():
+                if key != 'project_name':
+                    container_list.append(cfg[key]['name'])
+            
+            if values not in container_list:
+                raise argparse.ArgumentError(
+                    self, f'\'{values}\' not in container list: {container_list}')
+            setattr(namespace, self.dest, values)
+
 if __name__ == '__main__':
 
     # Multi-container arg parsing (single compose file)
-    # Note: this is not same as multi-project where multiple compose files are used
+    # Note: this is not same as multi-project where multiple compose files are used. 
+    #       that'll be a separate branch later once I get the time
 
     parser = argparse.ArgumentParser()
 
@@ -252,14 +281,15 @@ if __name__ == '__main__':
 
     # append additional params to actions here
     for action in actions:
-        action.add_argument('container', help='container to attach to', nargs='?', default='all')
+        action.add_argument('container',
+            help='container to attach to',
+            nargs='?',
+            default='all',
+            action=CommandManager.ValidateContainerArg)
 
     # parse args
     args = parser.parse_args()
 
-    
-
     #### take action on args below ####
-
     cmdlist, envlist = CommandManager.parsecommand(args)
     CommandManager.execute_cmdlist(cmdlist, envlist)
