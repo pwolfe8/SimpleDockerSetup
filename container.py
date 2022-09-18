@@ -58,11 +58,9 @@ class CommandManager:
         cls.prep_env_file(envlist)
         ret = cls.execute_cmd_getoutput(status_cmd_str)
         lines = ret.split('\n')
+        if 'no such service' in lines[0]:
+            return 'Down', None
         container_status_lines = lines[2:]
-
-        # print(f'status lines: {container_status_lines}')
-
-        # code.interact(local=locals())
 
         statuses = []
 
@@ -127,7 +125,7 @@ class CommandManager:
         instance_name = f'{container_name}_instance_{parentdir}'
 
         # create command strings for all or container here
-        cmd_start = f'docker-compose -f {composefile} -p {projectname}'
+        cmd_start = f'docker compose -f {composefile} -p {projectname}'
 
         cmd_up_all = f'{cmd_start} up --detach --build'
         cmd_up_container = f'{cmd_up_all} {service_name}'
@@ -184,8 +182,12 @@ class CommandManager:
                 print(f'    options: {attachable_containers}')
                 exit(1)
             else:
-                print(f'attaching to container instance {instance_name}...')
-                cmdlist.append(cmd_attach_container)
+                if status == 'Up':
+                    print(f'attaching to container {container_name} instance {instance_name}...')
+                    cmdlist.append(cmd_attach_container)
+                else:
+                    print(f'container {container_name} is not up! cannot attach')
+                    exit(1)
 
         elif args.action == 'logs':
             if container_name == 'all':
@@ -210,7 +212,11 @@ class CommandManager:
 
     @classmethod
     def execute_cmd_getoutput(cls, cmdstr):
-        return subprocess.check_output(cmdstr.split()).decode('utf-8')
+        try:
+            ret = subprocess.check_output(cmdstr, shell=True, stderr=subprocess.STDOUT)
+            return ret.decode('utf-8')
+        except subprocess.CalledProcessError as e:
+            return e.output.decode('utf-8')
 
     @classmethod 
     def prep_env_file(cls, envlist):
@@ -250,7 +256,7 @@ class CommandManager:
         def get_valid_containers():
             container_list = ['all']
             for key in cfg.keys():
-                if key != 'project_name':
+                if 'container_' in key:
                     container_list.append(cfg[key]['name'])
             return container_list
         def __call__(self, parser, namespace, values, option_string=None):
