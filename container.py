@@ -60,7 +60,9 @@ class CommandManager:
         lines = ret.split('\n')
         if 'no such service' in lines[0]:
             return 'Down', None
-        container_status_lines = lines[2:]
+
+        container_status_lines = lines[1:]
+        # print(container_status_lines)
 
         statuses = []
 
@@ -70,7 +72,8 @@ class CommandManager:
             if line:
                 spl = line.split()
                 parsed_container_name = spl[0]
-                if 'Up' in [word.strip() for word in spl]:
+                cleaned = [word.strip() for word in spl]
+                if 'Up' in cleaned or 'running' in cleaned:
                     status = 'Up'
                 else:
                     status = 'Down'
@@ -199,7 +202,11 @@ class CommandManager:
             if container_name == 'all':
                 cmdlist.append(cmd_status_all)
             else:
-                cmdlist.append(cmd_status_container)
+                if status == 'Down':
+                    print(f'{container_name} is {status}')
+                    exit(1)
+                else:
+                    cmdlist.append(cmd_status_container)
                 
         else:
             raise Exception(f'unrecognized action {args.action}!')
