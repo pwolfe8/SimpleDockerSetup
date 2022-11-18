@@ -1,7 +1,14 @@
 #!/bin/bash
 
+DISTRO=${1:-"ubuntu"}
+if [ $DISTRO == "debian" ] ; then
+  echo "you may want to run rpi-update first"
+  echo "press enter to continue or ctrl+c to back out"
+  read user_continue
+fi
+
 echo ""
-echo "running host docker setup script"
+echo "running host docker setup script for distro choice: $DISTRO (default ubuntu)"
 echo ""
 
 if [ -x "$(command -v docker)" ]; then
@@ -14,16 +21,17 @@ else
       curl \
       gnupg \
       lsb-release
-
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/${DISTRO}/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
     echo \
-    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${DISTRO} \
     $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 
-    sudo apt-get update
-    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    sudo apt update
+    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 fi
 
 GROUP=docker
