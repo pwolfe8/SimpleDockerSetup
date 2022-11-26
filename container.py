@@ -14,7 +14,11 @@ with open('container_config.yaml', 'r') as f:
     cfg = yaml.safe_load(f)
 
 class CommandManager:
-    
+
+    ### choose your docker compose command here based on docker version
+    # docker_compose_cmd = 'docker-compose'
+    docker_compose_cmd = 'docker compose'
+
     # name of container stuff
     basename = cfg['name']
 
@@ -22,10 +26,13 @@ class CommandManager:
     action_choices = ('up', 'down', 'restart', 'attach', 'logs', 'status')
 
     # set service name in the docker-compose.yaml using container config name
-    @staticmethod
-    def init_composefile_service_name(composefile):
-        # get basename from container config yaml
-        basename = cfg['name']
+    @classmethod
+    def init_composefile_service_name(cls, composefile):
+        # get parent directory
+        parentdir = Path.cwd().parent.name
+        
+        envlist = []
+
         # read lines
         with open(composefile, 'r') as f:
             lines = f.readlines()
@@ -34,7 +41,7 @@ class CommandManager:
         triggerline = '[service name below]'
         for idx, line in enumerate(lines):
             if replaceNextLine:
-                lines[idx] = f'  {basename}_service:\n'
+                lines[idx] = f'  {cls.basename}_service:\n'
                 break
             elif triggerline in line:
                 replaceNextLine = True
@@ -54,35 +61,47 @@ class CommandManager:
     def __init__(self) -> None:
         pass
 
+    @staticmethod
+    def getParentDirectory():
+      # ensure lower case for project naming
+      return Path.cwd().parent.name.lower()
+
     @classmethod
-    def getProjectStatus(cls, projectname, composefile, envlist):
+    def getProjectStatus(cls, envlist, status_cmd_str):
+        print(f'{status_cmd_str}')
         # prep env file before checking
         cls.prep_env_file(envlist)
-        # check
+        ret = cls.execute_cmd_getoutput(status_cmd_str)
+        lines = ret.split('\n')
+        if 'no such service' in lines[0]:
+            return 'Down', None
+
+        container_status_lines = lines[1:]
+        # print(container_status_lines)
+
         statuses = []
-        cmd = f'COMPOSE_FILE={composefile} docker-compose -p {projectname} ps'
-        proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-        lines = io.TextIOWrapper(proc.stdout, encoding="utf-8").readlines()
-        container_status_lines = lines[2:]
-        # print(f'status lines: {container_status_lines}')
+
         if len(container_status_lines) == 0:
             return 'Down', None
         for line in container_status_lines:
-            spl = line.split()
-            # print(f'split: {spl}')
-            parsed_container_name = spl[0]
-            if 'Up' in [word.strip() for word in spl]:
-                status = 'Up'
-            else:
-                status = 'Down'
-            statuses.append((parsed_container_name, status))
+            if line:
+                spl = line.split()
+                parsed_container_name = spl[0]
+                cleaned = [word.strip() for word in spl]
+                if 'Up' in cleaned or 'running' in cleaned:
+                    status = 'Up'
+                else:
+                    status = 'Down'
+                statuses.append((parsed_container_name, status))
         status_set = set([s[1] for s in statuses])
-        if len(status_set) == 1:
+        if len(status_set) == 0:
+            return 'Down', None
+        elif len(status_set) == 1:
             overall_status = list(status_set)[0]
         else:
             overall_status = 'mixed'
             print(
-                f'project {projectname} overall status is mixed. you may want to check on this!!!!'
+                f'overall status is mixed. you may want to check on this!!!!'
             )
             print(statuses)
         return overall_status, statuses
@@ -91,7 +110,7 @@ class CommandManager:
     def getSharedDockerComposeEnv():
         starting_env = []
         arch = platform.machine()
-        parentdir = Path.cwd().parent.name
+        parentdir = CommandManager.getParentDirectory()
         starting_env.append(f'ARCH={arch}')
         starting_env.append(f'PARENTDIR={parentdir}')
         starting_env.append(f'FROM_IMG_GPU=pwolfe854/gst_ds_env:{arch}_gpu')
@@ -104,58 +123,74 @@ class CommandManager:
     @classmethod
     def parsecommand(cls, args):
         # TODO make a multiple container example here 
-        parentdir = Path.cwd().parent.name
+        parentdir = cls.getParentDirectory()
         envlist = cls.getSharedDockerComposeEnv()
-        basename = cls.basename
+        basename = cls.basename.lower()
         envlist.append(f'BASENAME={basename}')
         composefile = 'docker-compose.yaml'
         cls.init_composefile_service_name(composefile)
         projectname = f'{parentdir}_{basename}'
-        containername = f'{basename}_instance_{parentdir}'
-        cmdlist = cls.parseaction(composefile, projectname, containername, envlist)
+        container_name = f'{basename}'
+        cmdlist = cls.parseaction(composefile, projectname, container_name, envlist)
         
         return cmdlist, envlist
 
     
     @classmethod
-    def parseaction(cls, composefile, projectname, containername, envlist):
+    def parseaction(cls, composefile, projectname, container_name, envlist):
         cmdlist = []
 
-        # check status first
-        status, _stats = cls.getProjectStatus(projectname, composefile, envlist)
+        parentdir = cls.getParentDirectory()
+        service_name = f'{container_name}_service'
+        instance_name = f'{container_name}_instance_{parentdir}'
 
-        # check action and choose appropriate commands
-        cmdstart = f'docker-compose -f {composefile} -p {projectname}'
-        upcmd = f'{cmdstart} up --detach --build'
-        downcmd = f'{cmdstart} down -t 0'
-        attachcmd = f'docker exec -it {containername} /bin/bash'
-        logcmd = f'COMPOSE_FILE={composefile} docker-compose -p {projectname} logs -f'
-        statuscmd = f'COMPOSE_FILE={composefile} docker-compose -p {projectname} ps'
+        # create command strings for all or container here
+        cmd_start = f'docker compose -f {composefile} -p {projectname}'
+
+        cmd_up_all = f'{cmd_start} up --detach --build'
+        cmd_up_container = f'{cmd_up_all} {service_name}'
+
+        cmd_down_all = f'{cmd_start} down -t 0'
+        cmd_down_container = f'{cmd_start} stop {service_name} -t 0 && {cmd_start} rm -f {service_name}'
+
+        cmd_restart_all = f'{cmd_start} restart -t 0'
+        cmd_restart_container = f'{cmd_restart_all} {service_name}'
+
+        cmd_attach_container = f'docker exec -it {instance_name} /bin/bash'
+
+        cmd_log_all = f'{cmd_start} logs -f'
+        cmd_log_container = f'{cmd_log_all} {service_name}'
+
+        cmd_status_all = f'{cmd_start} ps'
+        cmd_status_container = f'{cmd_status_all} {service_name}'
+
+        # check status first
+        status, _stats = cls.getProjectStatus(envlist, cmd_status_container)
+        print(f'{status=}')
 
         if args.action == 'up':
             if status == 'Up':
                 print(f'project {projectname} is already up!!')
                 exit(1)
             else:
-                cmdlist.append(upcmd)
+                cmdlist.append(cmd_up_all)
         elif args.action == 'down':
-            cmdlist.append(downcmd)
+            cmdlist.append(cmd_down_all)
         elif args.action == 'restart':
-            cmdlist.append(downcmd)
-            cmdlist.append(upcmd)
+            cmdlist.append(cmd_restart_all)
         elif args.action == 'attach':
             if status == 'Down':
                 print(f'seems project {projectname} is not up')
                 exit(1)
-            print(f'attaching to container {containername}...')
-            cmdlist.append(attachcmd)
+            print(f'attaching to container {container_name}...')
+            cmdlist.append(cmd_attach_container)
         elif args.action == 'logs':
             if status == 'Down':
                 print(f'seems project {projectname} is not up')
                 exit(1)
-            cmdlist.append(logcmd)
+            cmdlist.append(cmd_log_all)
         elif args.action == 'status':
-            cmdlist.append(statuscmd)
+            cmdlist.append(cmd_status_all)
         else:
             raise Exception(f'unrecognized action {args.action}!')
         return cmdlist
@@ -166,7 +201,12 @@ class CommandManager:
 
     @classmethod
     def execute_cmd_getoutput(cls, cmdstr):
-        return subprocess.check_output(cmdstr.split()).decode('utf-8')
+        # return subprocess.check_output(cmdstr.split()).decode('utf-8')
+        try:
+            ret = subprocess.check_output(cmdstr, shell=True, stderr=subprocess.STDOUT)
+            return ret.decode('utf-8')
+        except subprocess.CalledProcessError as e:
+            return e.output.decode('utf-8')
 
     @classmethod 
     def prep_env_file(cls, envlist):
